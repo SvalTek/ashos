@@ -13,6 +13,8 @@ packages = f"base linux{KERNEL} btrfs-progs sudo grub dhcpcd networkmanager nano
             linux-firmware" # os-prober bash tmux arch-install-scripts
 if not is_ash_bundle:
     packages +=  " python3 python-anytree"
+else:
+    packages +=  " zip"
 if is_efi:
     packages += " efibootmgr"
 if is_luks:
@@ -51,7 +53,7 @@ def main():
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} > /etc/hostname")
     os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
-    #os.system(f"{SUDO} chroot /mnt {SUDO} localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    #os.system(f"localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
     os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
     os.system("locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
@@ -98,7 +100,11 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
 def strap():
-    sp.check_call(f"pacstrap /mnt --needed {packages}", shell=True)
+    if is_strap_cache:
+        os.system(f"repo-add {strap_cache_dir}/repo.db.tar.gz {strap_cache_dir}/*.pkg.tar.zst")
+        sp.check_call(f'pacstrap -c /mnt --cachedir {strap_cache_dir} --needed {packages}', shell=True)
+    else:
+        sp.check_call(f'pacstrap /mnt --needed {packages}', shell=True)
 
 main()
 

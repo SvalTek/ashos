@@ -34,7 +34,7 @@ def bundler():
         open(f"{tmpdir}/python.com", "wb").write(csmp_file)
         open(f"{tmpdir}/.args", "w").write("/zip/ash\n...")
         os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
-        os.system(f"zip -j {tmpdir}/python.com {tmpdir}/ash {tmpdir}/.args")
+        os.system(f"zip -uj {tmpdir}/python.com {tmpdir}/ash {tmpdir}/.args")
       # Make it executable
         mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
         os.chmod(f"{tmpdir}/python.com", mode)
@@ -202,10 +202,10 @@ def find_command(cmds):
         sys.exit(f"F: Command {cmds} not found!")
 #    return which(cmd) or which(f"/sbin/{cmd}") or which("/usr/sbin/{cmd}")
 
-def get_external_partition(thing):
+def get_path(msg):
     clear()
     while True:
-        print(f"Enter your external {thing} partition (e.g. /dev/sdaX):")
+        print(msg)
         p = input("> ")
         if p:
             if yes_no("Happy with your choice?"):
@@ -322,10 +322,14 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     os.system("chmod 700 /.snapshots/ash/root")
     os.system("chmod 1777 /.snapshots/ash/tmp")
     os.system(f"echo '0' > /usr/share/ash/snap")
-    os.system(f"echo 'mutable_dirs::' > /etc/ash.conf")
-    os.system(f"echo 'mutable_dirs_shared::' >> /etc/ash.conf")
-    if distro in ("arch", "cachyos", "endeavouros"):
-        os.system(f"echo 'aur::False' >> /etc/ash.conf")
+    with open("/etc/ash.conf", "a+") as f:
+        if is_ash_bundle:
+            f.write("[common]\nbundle = True\n\n")
+        f.write("[mutable_dirs]\n\n")
+        f.write("[mutable_dirs_shared]\n\n")
+        if distro in ("arch", "artix", "cachyos", "endeavouros"):
+            f.write("[aur]\nFalse\n\n") # REVIEW not generic
+        f.write("[notes]\n\n")
   # Update fstab
     with open('/etc/fstab', 'a') as f: # assumes script run as root # REVIEW 'w'
         for mntdir in mntdirs: # common entries
@@ -497,6 +501,9 @@ def yes_no(msg):
         elif reply.casefold() in ('no', 'n'):
             e = False
             break
+        elif reply.casefold() in ('exit', 'quit'):
+            unmounts("failed")
+            sys.exit(1)
         else:
             print("F: Invalid choice!")
             continue
@@ -520,26 +527,26 @@ if is_ash_bundle and not is_efi:
         sys.exit("F: Please modify and run MBR prep script and run setup later!")
 is_boot_external = yes_no("Would you like to use a separate boot partition?")
 is_home_external = yes_no("Would you like to use a separate home partition?")
+is_strap_cache = yes_no("Do you have an offline package cache for bootstrapping?")
 is_mutable = yes_no("Would you like this installation to be mutable?")
 if is_boot_external and is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "var"]
-    bp = get_external_partition('boot')
-    hp = get_external_partition('home')
+    bp = get_path("Enter external boot partition (e.g. /dev/sdaX):")
+    hp = get_path("Enter external home partition (e.g. /dev/sdaY):")
 elif is_boot_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "home", "var"]
-    bp = get_external_partition('boot')
+    bp = get_path("Enter external boot partition (e.g. /dev/sdaX):")
 elif is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "var"]
-    hp = get_external_partition('home')
+    hp = get_path("Enter external home partition (e.g. /dev/sdaY):")
 else:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
-#if is_ash_bundle and not is_efi: # disadvantage: only for BTRFS
-#    mntdirs += " bundle"
-#    btrdirs.append(f"@bundle{distro_suffix}")
+if is_strap_cache:
+    strap_cache_dir = get_path("Enter offline cache directory to bootstrap packages from:")
 is_luks = yes_no("Would you like to use LUKS?")
 if is_luks:
     os_root = "/dev/mapper/luks_root"
